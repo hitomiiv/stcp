@@ -28,6 +28,19 @@ static int s_to_ms(int s)
 	return s * 1000;
 }
 
+static void init_timeout(struct timeval* timeout, int timeout_milliseconds)
+{
+	assert(timeout);
+	assert(timeout_milliseconds >= 0);
+
+	int seconds = ms_to_s(timeout_milliseconds);
+	timeout_milliseconds -= s_to_ms(seconds);
+	int microseconds = ms_to_us(timeout_milliseconds);
+
+	timeout->tv_sec = seconds;
+	timeout->tv_usec = microseconds;
+}
+
 bool stcp_open_socket(socket_t* s)
 {
 	assert(s);
@@ -36,12 +49,7 @@ bool stcp_open_socket(socket_t* s)
 	return *s != -1;
 }
 
-bool stcp_poll_accept(const socket_t* s, int timeout_milliseconds)
-{
-	return stcp_poll_receive(s, timeout_milliseconds);
-}
-
-bool stcp_poll_send(const socket_t* s, int timeout_milliseconds)
+int stcp_poll_write(const socket_t* s, int timeout_milliseconds)
 {
 	assert(s);
 	assert(timeout_milliseconds >= -1);
@@ -49,22 +57,17 @@ bool stcp_poll_send(const socket_t* s, int timeout_milliseconds)
 	if (timeout_milliseconds == -1)
 		return true;
 
-	int seconds = ms_to_s(timeout_milliseconds);
-	timeout_milliseconds -= s_to_ms(seconds);
-	int microseconds = ms_to_us(timeout_milliseconds);
+	struct timeval timeout;
+	init_timeout(&timeout, timeout_milliseconds);
 
 	fd_set set;
 	FD_ZERO(&set);
 	FD_SET(*s, &set);
 
-	struct timeval timeout;
-	timeout.tv_sec = seconds;
-	timeout.tv_usec = microseconds;
-
-	return select(*s + 1, NULL, &set, NULL, &timeout) > 0;
+	return select(*s + 1, NULL, &set, NULL, &timeout);
 }
 
-bool stcp_poll_receive(const socket_t* s, int timeout_milliseconds)
+int stcp_poll_read(const socket_t* s, int timeout_milliseconds)
 {
 	assert(s);
 	assert(timeout_milliseconds >= -1);
@@ -72,19 +75,14 @@ bool stcp_poll_receive(const socket_t* s, int timeout_milliseconds)
 	if (timeout_milliseconds == -1)
 		return true;
 
-	int seconds = ms_to_s(timeout_milliseconds);
-	timeout_milliseconds -= s_to_ms(seconds);
-	int microseconds = ms_to_us(timeout_milliseconds);
+	struct timeval timeout;
+	init_timeout(&timeout, timeout_milliseconds);
 
 	fd_set set;
 	FD_ZERO(&set);
 	FD_SET(*s, &set);
 
-	struct timeval timeout;
-	timeout.tv_sec = seconds;
-	timeout.tv_usec = microseconds;
-
-	return select(*s + 1, &set, NULL, NULL, &timeout) > 0;
+	return select(*s + 1, &set, NULL, NULL, &timeout);
 }
 
 void stcp_close_socket(socket_t* s)
