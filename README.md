@@ -1,6 +1,8 @@
 # stcp
 This is a simple, lightweight, and cross-platform TCP/IP library written in C
 
+When compiling on Windows, link against `ws2_32`
+
 First initialize the library with `stcp_initialize();`
 There are two basic structures, `stcp_server` and `stcp_channel`, which represent a TCP server and client, respectively.
 Both of these need an `stcp_address` and a port to create. Only ipv4 and hostnames are supported.
