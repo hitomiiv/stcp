@@ -37,3 +37,4 @@ int main()
 	return 0;
 }
 ```
+I don't think a license is needed for this. Just don't do anything stupid <3
