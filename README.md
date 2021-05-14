@@ -5,7 +5,9 @@ When compiling on Windows, link against `ws2_32`
 
 First initialize the library with `stcp_initialize();`. There are two basic structures, `stcp_server` and `stcp_channel`, which represent a TCP server and client, respectively. Both of these need an `stcp_address` and a port to create. Only ipv4 and hostnames are supported. Servers can accept pending channels, and channels can send/receive data. Note that for send/receive, a timeout of 0 does not block the caller. However, a timeout of -1 blocks the caller until the task is completed.
 
-Here's an example. In a real program, remember to check the return values:
+The user can also handle errors with `stcp_set_error_callback(cb, user_data)`. The callback function returns void takes two parameters, an `stcp_error` for the error code and a `void*` for the user data. 
+
+Here's an example. In a real program, remember to check for errors:
 ```c
 #include <stdio.h>
 #include <string.h>
