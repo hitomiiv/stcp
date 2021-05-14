@@ -218,19 +218,6 @@ static char* stcp_resolve_hostname(const char* hostname)
 	return ipv4;
 }
 
-//char* stcp_resolve_socket(const socket_t* s)
-//{
-//	assert(s);
-//	const struct in_addr* addr = (const struct in_addr*) s;
-//	char* converted = inet_ntoa(*addr);
-//	if (!converted)
-//		return NULL;
-//	char* ipv4 = malloc(strlen(converted) + 1);
-//	assert(ipv4);
-//	strcpy(ipv4, converted);
-//	return ipv4;
-//}
-
 stcp_address* stcp_create_address_ipv4(const char* ipv4, int port)
 {
 	assert(ipv4);
@@ -347,7 +334,7 @@ stcp_channel* stcp_create_channel(const stcp_address* server_address)
 	return channel;
 }
 
-bool stcp_send(const stcp_channel* channel, const char* buffer, int length, int timeout_milliseconds)
+int stcp_send(const stcp_channel* channel, const char* buffer, int length, int timeout_milliseconds)
 {
 	assert(channel);
 	assert(buffer);
@@ -355,15 +342,12 @@ bool stcp_send(const stcp_channel* channel, const char* buffer, int length, int 
 	assert(timeout_milliseconds >= -1);
 
 	if (!stcp_poll_send(&channel->socket, timeout_milliseconds))
-		return NULL;
+		return STCP_TIMED_OUT;
 
-	return send(channel->socket, buffer, length, 0) >= 0;
+	return send(channel->socket, buffer, length, 0);
 }
 
-/*
- * Receives data through a socket
- */
-bool stcp_receive(const stcp_channel* channel, char* buffer, int length, int timeout_milliseconds)
+int stcp_receive(const stcp_channel* channel, char* buffer, int length, int timeout_milliseconds)
 {
 	assert(channel);
 	assert(buffer);
@@ -371,14 +355,9 @@ bool stcp_receive(const stcp_channel* channel, char* buffer, int length, int tim
 	assert(timeout_milliseconds >= -1);
 
 	if (!stcp_poll_receive(&channel->socket, timeout_milliseconds))
-		return NULL;
+		return STCP_TIMED_OUT;
 
-	length = recv(channel->socket, buffer, length - 1, 0);
-	if (length <= 0)
-		return false;
-
-	buffer[length - 1] = 0;
-	return true;
+	return recv(channel->socket, buffer, length, 0);
 }
 
 void stcp_free_channel(stcp_channel* channel)

@@ -1,9 +1,7 @@
 #include "socket.h"
 
 #include <assert.h>
-#include <string.h>
 #include <stdlib.h>
-#include <errno.h>
 
 #ifdef _WIN32
 	#include <winsock2.h>
