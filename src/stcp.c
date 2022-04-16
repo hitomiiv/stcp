@@ -3,12 +3,10 @@
 #include "stcp.h"
 
 #include <assert.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
-#include <stdio.h>
+#include <openssl/ssl.h>
 
 #ifdef _WIN32
 	#include <winsock2.h>
@@ -20,129 +18,256 @@
 	#include <unistd.h>
 #endif
 
+// ----- TCP/IP socket types -----
+typedef struct stcp_channel
+{
+	socket_t socket;
+} stcp_channel;
+
+typedef struct stcp_server
+{
+	socket_t socket;
+} stcp_server;
+
+typedef struct stcp_encrypted_channel
+{
+	socket_t socket;
+	SSL* ssl;
+} stcp_encrypted_channel;
+
+typedef struct stcp_encrypted_server
+{
+	socket_t socket;
+	SSL* ssl;
+} stcp_encrypted_server;
+
+
 // ----- Initialization -----
+static bool init = false;
+static SSL_CTX* ssl_ctx = NULL;
+
 bool stcp_initialize()
 {
-	stcp_set_error_callback(NULL, NULL);
-
-#ifdef _WIN32
-	WSADATA data;
-	errno = WSAStartup(MAKEWORD(2, 2), &data);
-	if (errno != 0)
+	if (!init)
 	{
-		stcp_raise_error(errno);
-		return false;
+		// OpenSSL initialization
+		SSL_library_init();
+		SSL_load_error_strings();
+
+		ssl_ctx = SSL_CTX_new(TLS_method());
+		if (!ssl_ctx)
+		{
+			stcp_raise_error(STCP_SSL_ERROR);
+			return false;
+		}
+
+		// socket initialization
+	#ifdef _WIN32
+		WSADATA data;
+		errno = WSAStartup(MAKEWORD(2, 2), &data);
+		if (errno != 0)
+		{
+			SSL_CTX_free(ssl_ctx);
+			ssl_ctx = NULL;
+			stcp_raise_error(errno);
+			return false;
+		}
+	#endif
+
+		init = true;
 	}
-#endif
 
 	return true;
 }
 
 void stcp_terminate()
 {
-#ifdef _WIN32
-	WSACleanup();
-#endif
+	if (init)
+	{
+		// OpenSSL cleanup
+		SSL_CTX_free(ssl_ctx);
+		ssl_ctx = NULL;
+
+		// socket cleanup
+	#ifdef _WIN32
+		WSACleanup();
+	#endif
+
+		init = false;
+	}
 }
 
 // ----- Servers -----
-bool stcp_init_server(stcp_server* server,
-		const char* address,
-		const char* protocol,
-		int max_pending_channels)
+stcp_server* stcp_open_server(const char* address, const char* protocol, int max_pending_channels)
 {
+	stcp_server* server = (stcp_server*) malloc(sizeof(stcp_server));
 	assert(server);
 	assert(address);
 	assert(max_pending_channels > 0);
 
 	if (!stcp_socket_init(&server->socket))
-		return false;
+	{
+		stcp_close_server(server);
+		return NULL;
+	}
 
 	if (!stcp_socket_bind(server->socket, address, protocol))
 	{
 		stcp_close_server(server);
-		return false;
+		return NULL;
 	}
 
 	if (!stcp_socket_listen(server->socket, max_pending_channels))
 	{
 		stcp_close_server(server);
-		return false;
+		return NULL;
 	}
 
-	return true;
+	return server;
 }
 
-bool stcp_accept_channel(stcp_channel* channel, stcp_server server, int timeout_milliseconds)
+stcp_channel* stcp_accept_channel(const stcp_server* server, int timeout_milliseconds)
 {
-	assert(channel);
+	assert(server);
 	assert(timeout_milliseconds >= -1);
 
-	return stcp_socket_poll_read(server.socket, timeout_milliseconds)
-		&& stcp_socket_accept(&channel->socket, server.socket);
+	if (!stcp_socket_poll_read(server->socket, timeout_milliseconds))
+		return NULL; // timed out
+
+	stcp_channel* channel = (stcp_channel*) malloc(sizeof(stcp_channel));
+	assert(channel);
+
+	if (!stcp_socket_accept(&channel->socket, server->socket))
+	{
+		stcp_close_channel(channel);
+		return NULL;
+	}
+
+	return channel;
 }
 
 void stcp_close_server(stcp_server* server)
 {
-	assert(server);
-	stcp_socket_close(&server->socket);
+	if (server)
+	{
+		stcp_socket_close(&server->socket);
+		free(server);
+	}
 }
 
-#include <stdio.h>
-
 // ----- Channels -----
-bool stcp_init_channel(stcp_channel* channel,
-		const char* address,
-		const char* protocol)
+stcp_channel* stcp_open_channel(const char* address, const char* protocol)
 {
+	stcp_channel* channel = (stcp_channel*) malloc(sizeof(stcp_channel));
 	assert(channel);
 	assert(address);
 	assert(protocol);
 
 	if (!stcp_socket_init(&channel->socket))
-		return false;
-
-//	if (!stcp_socket_poll_write(channel->socket, timeout_milliseconds))
-//	{
-//		stcp_close_channel(channel);
-//		return false;
-//	}
+	{
+		stcp_close_channel(channel);
+		return NULL;
+	}
 
 	if (!stcp_socket_connect(channel->socket, address, protocol))
 	{
 		stcp_close_channel(channel);
+		return NULL;
+	}
+
+	return channel;
+}
+
+bool stcp_send(const stcp_channel* channel,
+		const char* buffer,
+		int length,
+		int timeout_milliseconds)
+{
+	assert(channel);
+	assert(buffer);
+	assert(length > 0);
+
+	if (!stcp_socket_poll_write(channel->socket, timeout_milliseconds))
 		return false;
+
+	int bytes_sent = 0;
+	while (bytes_sent < length)
+	{
+		int ret = stcp_socket_write(channel->socket,
+				buffer + bytes_sent,
+				length - bytes_sent);
+
+		if (ret == 0)
+			return false;
+
+		bytes_sent += ret;
 	}
 
 	return true;
 }
 
-int stcp_send(stcp_channel channel, const char* buffer, int length, int timeout_milliseconds)
+int stcp_receive(const stcp_channel* channel,
+		char* buffer,
+		int length,
+		int timeout_milliseconds)
 {
+	assert(channel);
 	assert(buffer);
 	assert(length > 0);
-	assert(timeout_milliseconds >= -1);
 
-	if (!stcp_socket_poll_write(channel.socket, timeout_milliseconds))
+	if (!stcp_socket_poll_read(channel->socket, timeout_milliseconds))
 		return 0;
 
-	return stcp_socket_send(channel.socket, buffer, length);
+	int bytes_received = 0;
+	do
+	{
+		int ret = stcp_socket_read(channel->socket,
+				buffer + bytes_received,
+				length - bytes_received);
+
+		if (ret == 0)
+			break;
+
+		bytes_received += ret;
+	} while (bytes_received < length && stcp_socket_poll_read(channel->socket, 0));
+
+	return bytes_received;
 }
 
-int stcp_receive(stcp_channel channel, char* buffer, int length, int timeout_milliseconds)
+bool stcp_stream_receive(const stcp_channel* channel,
+		stream_output_fn stream_output,
+		void* user_data,
+		int timeout_milliseconds)
 {
-	assert(buffer);
-	assert(length > 0);
-	assert(timeout_milliseconds >= -1);
+	assert(channel);
+	assert(stream_output);
 
-	if (!stcp_socket_poll_read(channel.socket, timeout_milliseconds))
-		return 0;
+	if (!stcp_socket_poll_read(channel->socket, timeout_milliseconds))
+		return false;
 
-	return stcp_socket_receive(channel.socket, buffer, length);
+	char buffer[STCP_STREAM_BUFFER_SIZE];
+	const int length = STCP_STREAM_BUFFER_SIZE;
+
+	do
+	{
+		int bytes_received = stcp_socket_read(channel->socket, buffer, length);
+
+		if (bytes_received == 0)
+			return false;
+
+		if (!stream_output(buffer, bytes_received, user_data))
+			return false;
+
+	} while (stcp_socket_poll_read(channel->socket, 0));
+
+	return true;
 }
 
 void stcp_close_channel(stcp_channel* channel)
 {
-	assert(channel);
-	stcp_socket_close(&channel->socket);
+	if (channel)
+	{
+		stcp_socket_close(&channel->socket);
+		free(channel);
+	}
 }
