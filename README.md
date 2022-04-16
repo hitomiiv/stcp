@@ -4,7 +4,7 @@ This is a simple, lightweight, and cross-platform TCP/IP library written in C
 There are two basic structures, `stcp_server` and `stcp_channel`, which represent a TCP server and client, respectively. Both of these need an address and protocol to create. The protocol can alternatively indicate the port (i.e. "80"). Only ipv4 and hostnames are supported. Servers can accept pending channels, and channels can send and receive data. 
 
 ## Compilation
-A Makefile is provided for unix environments. Use `make [static|shared]` to compile. By default, `make` compiles a static library.
+A Makefile is provided for unix environments. Run `make all` to compile.
 
 For Windows you will have to write your own Makefile or use an IDE. Make sure to link against `ws2_32`, `ssl`, and `crypto`.
 
