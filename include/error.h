@@ -6,53 +6,107 @@
 extern "C" {
 #endif
 
-// values: 4, 9, 13, 14, 22, 24, 35-71
+#ifndef _WIN32
+#include <errno.h>
+#endif
+
+// TODO non-portable error codes must use native handlers (ie strerr())
+
+// Portable error codes
 typedef enum stcp_error
 {
-	STCP_ADDRESS_FAMILY_NOT_SUPPORTED  = 47,
-	STCP_ADDRESS_IN_USE                = 48,
-	STCP_ADDRESS_NOT_AVAILABLE         = 49,
-	STCP_BLOCKED_BY_CALLEE             = 37,
-	STCP_BLOCKED_BY_CALLER             = 36,
-	STCP_CONNECTION_ABORTED            = 53,
-	STCP_CONNECTION_REFUSED            = 61,
-	STCP_CONNECTION_RESET              = 54,
-	STCP_CONNECTION_TIMED_OUT          = 60,
-	STCP_DIRECTORY_NOT_EMPTY           = 66,
-	STCP_FUNCTION_INTERRUPTED          = 4,
-	STCP_HOST_DOWN                     = 64,
-	STCP_HOST_UNREACHABLE              = 65,
-	STCP_INVALID_ARGUMENT              = 22,
-	STCP_INVALID_DESTINATION           = 39,
-	STCP_INVALID_FILE_HANDLE           = 9,
-	STCP_INVALID_NAME                  = 62,
-	STCP_INVALID_POINTER               = 14,
-	STCP_INVALID_PROTOCOL_OPTION       = 42,
-	STCP_INVALID_PROTOCOL              = 41,
-	STCP_INVALID_SOCKET                = 38,
-	STCP_MESSAGE_TOO_LONG              = 40,
-	STCP_NAME_TOO_LONG                 = 63,
-	STCP_NETWORK_DOWN                  = 50,
-	STCP_NETWORK_RESET                 = 52,
-	STCP_NETWORK_UNREACHABLE           = 51,
-	STCP_NO_BUFFER_SPACE               = 55,
-	STCP_OLD_HANDLE                    = 70,
-	STCP_OPERATION_NOT_SUPPORTED       = 45,
-	STCP_OUT_OF_DISK_SPACE             = 69,
-	STCP_PERMISSION_DENIED             = 13,
-	STCP_PROTOCOL_FAMILY_NOT_SUPPORTED = 46,
-	STCP_PROTOCOL_NOT_SUPPORTED        = 43,
-	STCP_RESOURCE_NOT_LOCAL            = 71,
-	STCP_SOCKET_ALREADY_CONNECTED      = 56,
-	STCP_SOCKET_NOT_CONNECTED          = 57,
-	STCP_SOCKET_NOT_SUPPORTED          = 44,
-	STCP_SOCKET_SHUTDOWN               = 58,
-	STCP_TOO_MANY_PROCESSES            = 67,
-	STCP_TOO_MANY_REFERENCES           = 59,
-	STCP_TOO_MANY_SOCKETS              = 24,
-	STCP_TOO_MANY_USERS                = 68,
-	STCP_UNKNOWN_ERROR                 = 0,
-	STCP_WOULD_BLOCK                   = 35,
+	STCP_SSL_ERROR			= -1, // Use OpenSSL error handling
+	STCP_NO_ERROR			= 0,
+
+#ifdef _WIN32 // Winsock errors. Range: 10000 + 4, 9, 13, 14, 22, 24, 35-71
+	STCP_EINTR              = 10004,
+	STCP_EBADF              = 10009,
+	STCP_EACCES             = 10013,
+	STCP_EFAULT             = 10014,
+	STCP_EINVAL             = 10022,
+	STCP_EMFILE             = 10024,
+	STCP_EWOULDBLOCK	    = 10035,
+	STCP_EINPROGRESS	    = 10036,
+	STCP_EALREADY	        = 10037,
+	STCP_ENOTSOCK	        = 10038,
+	STCP_EDESTADDRREQ	    = 10039,
+	STCP_EMSGSIZE	        = 10040,
+	STCP_EPROTOTYPE	        = 10041,
+	STCP_ENOPROTOOPT	    = 10042,
+	STCP_EPROTONOSUPPORT	= 10043,
+	STCP_ESOCKTNOSUPPORT	= 10044,
+	STCP_EOPNOTSUPP	        = 10045,
+	STCP_EPFNOSUPPORT	    = 10046,
+	STCP_EAFNOSUPPORT	    = 10047,
+	STCP_EADDRINUSE	        = 10048,
+	STCP_EADDRNOTAVAIL	    = 10049,
+	STCP_ENETDOWN	        = 10050,
+	STCP_ENETUNREACH	    = 10051,
+	STCP_ENETRESET	        = 10052,
+	STCP_ECONNABORTED	    = 10053,
+	STCP_ECONNRESET	        = 10054,
+	STCP_ENOBUFS		    = 10055,
+	STCP_EISCONN		    = 10056,
+	STCP_ENOTCONN	        = 10057,
+	STCP_ESHUTDOWN	        = 10058,
+	STCP_ETOOMANYREFS	    = 10059,
+	STCP_ETIMEDOUT	        = 10060,
+	STCP_ECONNREFUSED	    = 10061,
+	STCP_ELOOP		        = 10062,
+	STCP_ENAMETOOLONG	    = 10063,
+	STCP_EHOSTDOWN	        = 10064,
+	STCP_EHOSTUNREACH	    = 10065,
+	STCP_ENOTEMPTY	        = 10066,
+	STCP_EPROCLIM	        = 10067,
+	STCP_EUSERS		        = 10068,
+	STCP_EDQUOT		        = 10069,
+	STCP_ESTALE		        = 10070,
+	STCP_EREMOTE		    = 10071,
+#else
+	STCP_EINTR              = EINTR,
+	STCP_EBADF              = EBADF,
+	STCP_EACCES             = EACCES,
+	STCP_EFAULT             = EFAULT,
+	STCP_EINVAL             = EINVAL,
+	STCP_EMFILE             = EMFILE,
+	STCP_EWOULDBLOCK	    = EWOULDBLOCK,
+	STCP_EINPROGRESS	    = EINPROGRESS,
+	STCP_EALREADY	        = EALREADY,
+	STCP_ENOTSOCK	        = ENOTSOCK,
+	STCP_EDESTADDRREQ	    = EDESTADDRREQ,
+	STCP_EMSGSIZE	        = EMSGSIZE,
+	STCP_EPROTOTYPE	        = EPROTOTYPE,
+	STCP_ENOPROTOOPT	    = ENOPROTOOPT,
+	STCP_EPROTONOSUPPORT	= EPROTONOSUPPORT,
+	STCP_ESOCKTNOSUPPORT	= ESOCKTNOSUPPORT,
+	STCP_EOPNOTSUPP	        = EOPNOTSUPP,
+	STCP_EPFNOSUPPORT	    = EPFNOSUPPORT,
+	STCP_EAFNOSUPPORT	    = EAFNOSUPPORT,
+	STCP_EADDRINUSE	        = EADDRINUSE,
+	STCP_EADDRNOTAVAIL	    = EADDRNOTAVAIL,
+	STCP_ENETDOWN	        = ENETDOWN,
+	STCP_ENETUNREACH	    = ENETUNREACH,
+	STCP_ENETRESET	        = ENETRESET,
+	STCP_ECONNABORTED	    = ECONNABORTED,
+	STCP_ECONNRESET	        = ECONNRESET,
+	STCP_ENOBUFS		    = ENOBUFS,
+	STCP_EISCONN		    = EISCONN,
+	STCP_ENOTCONN	        = ENOTCONN,
+	STCP_ESHUTDOWN	        = ESHUTDOWN,
+	STCP_ETOOMANYREFS	    = ETOOMANYREFS,
+	STCP_ETIMEDOUT	        = ETIMEDOUT,
+	STCP_ECONNREFUSED	    = ECONNREFUSED,
+	STCP_ELOOP		        = ELOOP,
+	STCP_ENAMETOOLONG	    = ENAMETOOLONG,
+	STCP_EHOSTDOWN	        = EHOSTDOWN,
+	STCP_EHOSTUNREACH	    = EHOSTUNREACH,
+	STCP_ENOTEMPTY	        = ENOTEMPTY,
+	STCP_EPROCLIM	        = 83, // No idea why EPROCLIM gives errors on WSL Ubuntu 20.04
+	STCP_EUSERS		        = EUSERS,
+	STCP_EDQUOT		        = EDQUOT,
+	STCP_ESTALE		        = ESTALE,
+	STCP_EREMOTE		    = EREMOTE,
+#endif
 } stcp_error;
 
 // Function pointer to void (stcp_error e, void* user_data)
@@ -66,6 +120,12 @@ stcp_error stcp_get_last_error();
 
 // Forwards an error to the error callback
 void stcp_raise_error(stcp_error err);
+
+// Convert an error to a human readable string
+const char* stcp_error_to_string(stcp_error err);
+
+// Print any and all errors
+void stcp_print_error();
 
 #ifdef __cplusplus
 }
