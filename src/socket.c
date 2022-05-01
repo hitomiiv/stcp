@@ -6,28 +6,45 @@
 #include <limits.h>
 #include <string.h>
 
-#include <openssl/ssl.h>
-
+#include "native/native.h"
 #include "error.h"
-
-#ifdef _WIN32
-	#include <winsock2.h>
-	#include <Ws2tcpip.h>
-	#define STCP_INVALID_SOCKET INVALID_SOCKET
-	#define SET_NON_BLOCKING(socket, value) ioctlsocket(*s, FIONBIO, value);
-#else
-	#include <sys/socket.h>
-	#include <sys/ioctl.h>
-	#include <arpa/inet.h>
-	#include <netdb.h>
-	#include <unistd.h>
-	#define STCP_INVALID_SOCKET -1LL
-	#define SET_NON_BLOCKING(socket, value) ioctl(*s, FIONBIO, value);
-#endif
 
 typedef struct timeval timeval;
 typedef struct sockaddr sockaddr;
 typedef struct addrinfo addrinfo;
+
+static bool init = false;
+
+void stcp_socket_initialize_library()
+{
+	if (!init)
+	{
+#ifdef _WIN32
+		WSADATA data;
+		int err = WSAStartup(MAKEWORD(2, 2), &data);
+		if (err != 0)
+		{
+			STCP_FAIL(err);
+		}
+#endif
+		init = true;
+	}
+}
+
+void stcp_socket_terminate_library()
+{
+	if (init)
+	{
+#ifdef _WIN32
+		int err = WSACleanup();
+		if (err != 0)
+		{
+			STCP_FAIL(err);
+		}
+#endif
+		init = false;
+	}
+}
 
 static timeval make_timeout(int timeout_milliseconds)
 {
@@ -48,7 +65,7 @@ static timeval make_timeout(int timeout_milliseconds)
 	return timeout;
 }
 
-static fd_set make_socket_set(socket_t* sockets, int n)
+static fd_set make_socket_set(const socket_t* sockets, int n)
 {
 	assert(sockets);
 	assert(n < FD_SETSIZE);
@@ -65,12 +82,9 @@ static fd_set make_socket_set(socket_t* sockets, int n)
 }
 
 // private function to resolve ips and hostnames
-static bool init_address(sockaddr* address,
-		const char* name,
-		const char* protocol)
+static sockaddr init_address(const char* name, const char* protocol)
 {
-	assert(address);
-	assert(name);
+	assert(name || protocol);
 
 	addrinfo hints;
 	memset(&hints, 0, sizeof(addrinfo));
@@ -78,113 +92,109 @@ static bool init_address(sockaddr* address,
     hints.ai_socktype = SOCK_STREAM;
 
 	addrinfo* info = NULL;
-	int err = getaddrinfo(name, protocol, &hints, &info);
-	if (err != 0)
+	sockaddr ret;
+	if (0 == getaddrinfo(name, protocol, &hints, &info))
 	{
-		stcp_raise_error(err);
-		return false;
+		ret = *info->ai_addr;
+		freeaddrinfo(info);
+	}
+	else
+	{
+		freeaddrinfo(info);
+		STCP_FAIL_LAST_ERROR();
 	}
 
-	*address = *info->ai_addr;
-
-	freeaddrinfo(info);
-	return true;
+	return ret;
 }
 
-bool stcp_socket_init(socket_t* s)
+socket_t stcp_socket_create()
+{
+	socket_t s = socket(AF_INET, SOCK_STREAM, 0);
+	if (s != STCP_INVALID_SOCKET)
+	{
+		unsigned long int mode = 1;
+		if (0 != STCP_SET_NON_BLOCKING(s, &mode))
+			STCP_FAIL_LAST_ERROR();
+	}
+	else
+	{
+		STCP_FAIL_LAST_ERROR();
+	}
+
+	return s;
+}
+
+socket_t stcp_socket_accept(const socket_t* server)
+{
+	assert(server);
+
+	socket_t s = accept(*server, NULL, NULL);
+	if (s != STCP_INVALID_SOCKET)
+	{
+		unsigned long int mode = 1;
+		if (0 != STCP_SET_NON_BLOCKING(s, &mode))
+			STCP_FAIL_LAST_ERROR();
+	}
+	else
+	{
+		STCP_FAIL_LAST_ERROR();
+	}
+
+	return s;
+}
+
+void stcp_socket_connect(const socket_t* s, const char* address, const char* protocol)
 {
 	assert(s);
 
-	// init
-	*s = STCP_INVALID_SOCKET;
-	*s = socket(AF_INET, SOCK_STREAM, 0);
-	if (*s == STCP_INVALID_SOCKET)
-	{
-		stcp_raise_error(stcp_get_last_error());
-		return false;
-	}
-
-	// set to non-blocking
-	unsigned long int mode = 1;
-	int err = SET_NON_BLOCKING(*s, &mode);
-	if (err != 0)
-	{
-		stcp_raise_error(err);
-		return false;
-	}
-
-	return true;
-}
-
-bool stcp_socket_bind(socket_t s, const char* address, const char* protocol)
-{
-	sockaddr addr;
-	if (!init_address(&addr, address, protocol))
-		return false;
-
-	if (0 != bind(s, &addr, sizeof(addr)))
-	{
-		stcp_raise_error(stcp_get_last_error());
-		return false;
-	}
-
-	return true;
-}
-
-bool stcp_socket_listen(socket_t s, int max_pending_channels)
-{
-	if (0 != listen(s, max_pending_channels))
-	{
-		stcp_raise_error(stcp_get_last_error());
-		return false;
-	}
-
-	return true;
-}
-
-bool stcp_socket_accept(socket_t* s, socket_t server)
-{
-	assert(s);
-
-	*s = accept(server, NULL, NULL);
-	if (*s == STCP_INVALID_SOCKET)
-	{
-		stcp_raise_error(stcp_get_last_error());
-		return false;
-	}
-
-	return true;
-}
-
-bool stcp_socket_connect(socket_t s, const char* address, const char* protocol)
-{
-	sockaddr addr;
-	if (!init_address(&addr, address, protocol))
-		return false;
-
-	if (0 != connect(s, &addr, sizeof(addr)))
+	sockaddr addr = init_address(address, protocol);
+	if (0 != connect(*s, &addr, sizeof(addr)))
 	{
 		stcp_error err = stcp_get_last_error();
 
 		// Ignore these errors:
 		// This is windows/linux's way of saying the
 		// non-blocking socket is connecting asynchronously
-		if (err == STCP_EWOULDBLOCK || err == STCP_EINPROGRESS)
-			return true;
-
-		stcp_raise_error(err);
-		return false;
+		if (err != STCP_EWOULDBLOCK && err != STCP_EINPROGRESS)
+			STCP_FAIL_LAST_ERROR();
 	}
-
-	return true;
+	else
+	{
+		STCP_FAIL_LAST_ERROR();
+	}
 }
 
-bool stcp_socket_poll_write(socket_t socket, int timeout_milliseconds)
+void stcp_socket_bind(const socket_t* s, const char* address, const char* protocol)
 {
-	return stcp_socket_poll_write_n(&socket, 1, timeout_milliseconds);
+	assert(s);
+
+	sockaddr addr = init_address(address, protocol);
+	if (0 != bind(*s, &addr, sizeof(addr)))
+		STCP_FAIL_LAST_ERROR();
 }
 
-bool stcp_socket_poll_write_n(socket_t* sockets, int n, int timeout_milliseconds)
+void stcp_socket_listen(const socket_t* s, int max_pending_channels)
+{
+	assert(s);
+	assert(max_pending_channels > 0);
+
+	if (0 != listen(*s, max_pending_channels))
+		STCP_FAIL_LAST_ERROR();
+}
+
+void stcp_socket_shutdown(const socket_t* s)
+{
+	assert(s);
+	if (0 != STCP_SHUTDOWN_SOCKET(*s))
+		STCP_FAIL_LAST_ERROR();
+}
+
+bool stcp_socket_poll_write(const socket_t* socket, int timeout_milliseconds)
+{
+	return stcp_socket_poll_write_n(socket, 1, timeout_milliseconds);
+}
+
+bool stcp_socket_poll_write_n(const socket_t* sockets, int n, int timeout_milliseconds)
 {
 	assert(sockets);
 	assert(n > 0);
@@ -193,30 +203,30 @@ bool stcp_socket_poll_write_n(socket_t* sockets, int n, int timeout_milliseconds
 	timeval timeout = make_timeout(timeout_milliseconds);
 
 	int sockets_ready = select(FD_SETSIZE, NULL, &socket_set, NULL, &timeout);
-	if (sockets_ready == -1)
+	if (sockets_ready == n)
 	{
-		stcp_raise_error(stcp_get_last_error());
+		return true;
+	}
+	else if (sockets_ready == -1)
+	{
+		STCP_FAIL_LAST_ERROR();
 		return false;
 	}
-	else if (sockets_ready != n)
+	else
 	{
 		if (timeout_milliseconds != 0)
 			stcp_raise_error(STCP_ETIMEDOUT);
 
 		return false;
 	}
-	else
-	{
-		return true;
-	}
 }
 
-bool stcp_socket_poll_read(socket_t socket, int timeout_milliseconds)
+bool stcp_socket_poll_read(const socket_t* socket, int timeout_milliseconds)
 {
-	return stcp_socket_poll_read_n(&socket, 1, timeout_milliseconds);
+	return stcp_socket_poll_read_n(socket, 1, timeout_milliseconds);
 }
 
-bool stcp_socket_poll_read_n(socket_t* sockets, int n, int timeout_milliseconds)
+bool stcp_socket_poll_read_n(const socket_t* sockets, int n, int timeout_milliseconds)
 {
 	assert(sockets);
 	assert(n > 0);
@@ -225,27 +235,29 @@ bool stcp_socket_poll_read_n(socket_t* sockets, int n, int timeout_milliseconds)
 	timeval timeout = make_timeout(timeout_milliseconds);
 
 	int sockets_ready = select(FD_SETSIZE, &socket_set, NULL, NULL, &timeout);
-	if (sockets_ready == -1)
+	if (sockets_ready == n)
 	{
-		stcp_raise_error(stcp_get_last_error());
+		return true;
+	}
+	else if (sockets_ready == -1)
+	{
+		STCP_FAIL_LAST_ERROR();
 		return false;
 	}
-	else if (sockets_ready != n)
+	else
 	{
 		if (timeout_milliseconds != 0)
 			stcp_raise_error(STCP_ETIMEDOUT);
 
 		return false;
 	}
-	else
-	{
-		return true;
-	}
 }
 
-int stcp_socket_write(socket_t s, const char* buffer, int n)
+int stcp_socket_write(const socket_t* s, const char* buffer, int n)
 {
-	int bytes_sent = send(s, buffer, n, 0);
+	assert(s);
+
+	int bytes_sent = send(*s, buffer, n, 0);
 	if (bytes_sent == -1)
 	{
 		stcp_raise_error(stcp_get_last_error());
@@ -255,9 +267,9 @@ int stcp_socket_write(socket_t s, const char* buffer, int n)
 	return bytes_sent;
 }
 
-int stcp_socket_read(socket_t s, char* buffer, int n)
+int stcp_socket_read(const socket_t* s, char* buffer, int n)
 {
-	int bytes_received = recv(s, buffer, n, 0);
+	int bytes_received = recv(*s, buffer, n, 0);
 	if (bytes_received == -1)
 	{
 		stcp_raise_error(stcp_get_last_error());
@@ -273,11 +285,7 @@ void stcp_socket_close(socket_t* s)
 
 	if (*s != STCP_INVALID_SOCKET)
 	{
-#ifdef _WIN32
-		closesocket(*s);
-#else
-		close(*s);
-#endif
+		STCP_CLOSE_SOCKET(*s);
 		*s = -1;
 	}
 }

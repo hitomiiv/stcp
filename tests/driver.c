@@ -6,9 +6,7 @@
 
 void process_error(stcp_error e, void* user_data)
 {
-	(void) e;
-
-	stcp_print_error();
+	stcp_print_error(e);
 
 	stcp_channel** channel = (stcp_channel**) user_data;
 	stcp_close_channel(*channel);
@@ -29,9 +27,12 @@ int main()
 	stcp_initialize();
 
 	const char* request = "HEAD / HTTP/1.2\r\n\r\n";
-	channel = stcp_open_channel("www.google.com", "http");
-	stcp_send(channel, request, strlen(request), 500);
-	stcp_stream_receive(channel, print_buffer, NULL, 500);
+
+	channel = stcp_connect("www.google.com", "http");
+	printf("Connected\n");
+
+	stcp_send(channel, request, strlen(request), 100);
+	stcp_stream_receive(channel, print_buffer, NULL, 100);
 
 	stcp_close_channel(channel);
 	stcp_terminate();

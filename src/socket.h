@@ -17,29 +17,32 @@ extern "C" {
 #include <stdbool.h>
 #endif
 
-#ifdef _WIN32
-	typedef unsigned long long int socket_t;
-#else
-	typedef long long int socket_t;
-#endif
+#include "native/native_types.h"
 
-// Returns true if successful
-bool stcp_socket_init(socket_t* s);
-bool stcp_socket_bind(socket_t s, const char* address, const char* protocol);
-bool stcp_socket_listen(socket_t s, int max_pending_channels);
-bool stcp_socket_accept(socket_t* s, socket_t server);
-bool stcp_socket_connect(socket_t s, const char* address, const char* protocol);
+// Library startup / cleanup
+void stcp_socket_initialize_library();
+void stcp_socket_terminate_library();
+
+// Socket creation
+socket_t stcp_socket_create();
+socket_t stcp_socket_accept(const socket_t* server);
+
+// Connection management
+void stcp_socket_connect(const socket_t* s, const char* address, const char* protocol);
+void stcp_socket_bind(const socket_t* s, const char* address, const char* protocol);
+void stcp_socket_listen(const socket_t* s, int max_pending_channels);
+void stcp_socket_shutdown(const socket_t* s);
 
 // Returns true if all sockets are ready to transfer data
 // Only raises STCP_CONNECTION_TIMED_OUT if timeout_milliseconds != 0
-bool stcp_socket_poll_write(socket_t socket, int timeout_milliseconds);
-bool stcp_socket_poll_write_n(socket_t* sockets, int n, int timeout_milliseconds);
-bool stcp_socket_poll_read(socket_t s, int timeout_milliseconds);
-bool stcp_socket_poll_read_n(socket_t* sockets, int n, int timeout_milliseconds);
+bool stcp_socket_poll_write(const socket_t* socket, int timeout_milliseconds);
+bool stcp_socket_poll_write_n(const socket_t* sockets, int n, int timeout_milliseconds);
+bool stcp_socket_poll_read(const socket_t* s, int timeout_milliseconds);
+bool stcp_socket_poll_read_n(const socket_t* sockets, int n, int timeout_milliseconds);
 
 // Returns the number of bytes transferred
-int stcp_socket_write(socket_t s, const char* buffer, int n);
-int stcp_socket_read(socket_t s, char* buffer, int n);
+int stcp_socket_write(const socket_t* s, const char* buffer, int n);
+int stcp_socket_read(const socket_t* s, char* buffer, int n);
 
 // Frees a socket's resources
 void stcp_socket_close(socket_t* s);
