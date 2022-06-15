@@ -13,19 +13,6 @@ extern "C" {
 // Portable error codes
 typedef enum stcp_error
 {
-	// SSL errors
-    STCP_SSL_WANT_CLIENT_HELLO_CB = -11,
-    STCP_SSL_WANT_ASYNC_JOB       = -10,
-    STCP_SSL_WANT_ASYNC           = -9,
-    STCP_SSL_WANT_ACCEPT          = -8,
-    STCP_SSL_WANT_CONNECT         = -7,
-    STCP_SSL_ZERO_RETURN          = -6,
-    STCP_SSL_SYSCALL              = -5,
-    STCP_SSL_WANT_X509_LOOKUP     = -4,
-    STCP_SSL_WANT_WRITE           = -3,
-    STCP_SSL_WANT_READ            = -2,
-    STCP_SSL_ERROR                = -1,
-
 	STCP_NO_ERROR			      = 0,
 
 #ifdef _WIN32 // Winsock errors. Range: 10000 + 4, 9, 13, 14, 22, 24, 35-71

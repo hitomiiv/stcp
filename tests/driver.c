@@ -4,12 +4,12 @@
 
 #include "../src/stcp.h"
 
+stcp_channel* channel = NULL;
+
 void process_error(stcp_error e, void* user_data)
 {
 	stcp_print_error(e);
-
-	stcp_channel** channel = (stcp_channel**) user_data;
-	stcp_close_channel(*channel);
+	stcp_close_channel(channel);
 	stcp_terminate();
 	exit(-1);
 }
@@ -22,8 +22,7 @@ bool print_buffer(const char* buffer, int length, void* user_data)
 
 int main()
 {
-	stcp_channel* channel = NULL;
-	stcp_set_error_callback(process_error, &channel);
+	stcp_set_error_callback(process_error, NULL);
 	stcp_initialize();
 
 	const char* request = "HEAD / HTTP/1.2\r\n\r\n";

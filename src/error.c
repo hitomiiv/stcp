@@ -10,9 +10,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
 static stcp_error_callback_fn _error_callback = NULL;
 static void* _user_data = NULL;
 
@@ -37,38 +34,10 @@ void stcp_raise_error(stcp_error err)
 		_error_callback(err, _user_data);
 }
 
-void stcp_raise_ssl_error(int ssl_error)
-{
-	stcp_raise_error(-ssl_error);
-}
-
 const char* stcp_error_to_string(stcp_error err)
 {
 	switch(err)
 	{
-	case STCP_SSL_ERROR:
-		return "SSL error";
-	case STCP_SSL_SYSCALL:
-		return "SSL syscall";
-	case STCP_SSL_WANT_CLIENT_HELLO_CB:
-		return "SSL want client hello cb";
-	case STCP_SSL_WANT_ASYNC_JOB:
-		return "SSL want async job";
-	case STCP_SSL_WANT_ASYNC:
-		return "SSL want async";
-	case STCP_SSL_WANT_ACCEPT:
-		return "SSL want accept";
-	case STCP_SSL_WANT_CONNECT:
-		return "SSL want connect";
-	case STCP_SSL_ZERO_RETURN:
-		return "SSL zero return";
-	case STCP_SSL_WANT_X509_LOOKUP:
-		return "SSL want x509 lookup";
-	case STCP_SSL_WANT_WRITE:
-		return "SSL want write";
-	case STCP_SSL_WANT_READ:
-		return "SSL want read";
-
 	case STCP_NO_ERROR:
 		return "No error";
 	case STCP_EINTR:
@@ -165,18 +134,6 @@ const char* stcp_error_to_string(stcp_error err)
 void stcp_print_error(stcp_error e)
 {
 	fprintf(stderr, "STCP error: %s\n", stcp_error_to_string(e));
-	if (e == STCP_SSL_ERROR || e == STCP_SSL_SYSCALL)
-	{
-		int sys_err = ERR_get_error();
-		if (sys_err != 0)
-		{
-			fprintf(stderr, "SSL error: %s\n", ERR_error_string(sys_err, NULL));
-			fprintf(stderr, "SSL reason: %s\n", ERR_reason_error_string(sys_err));
-		}
-
-		ERR_print_errors_fp(stderr);
-		fflush(stderr);
-	}
 }
 
 void stcp_fail(stcp_error err, const char* file, int line)
